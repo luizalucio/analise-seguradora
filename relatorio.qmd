@@ -1,0 +1,308 @@
+---
+title: "Análise de Seguros Automotivos do Estado de São Paulo no 1º semestre de 2021"
+subtitle: "Padrões de preços e sinistros por sexo e idade"
+author: "Luíza Helena Pereira Lúcio"
+date: today
+lang: pt
+format:
+  html:
+    toc: true
+    theme: cosmic
+    embed-resources: true
+  pdf:
+    documentclass: report
+---
+
+```{python}
+#| warning: false
+#| message: false
+#| echo: false
+#| results: "hide"
+
+# carregando pacotes
+import pandas as pd
+
+# carregando a base bruta
+dados_brutos = pd.read_csv("C:/Users/luiza/area_de_trabalho/Estatistica_UFLA/3º semestre/consultora-I/projeto-consultoria/bases/Autoseg2021A/arq_casco_comp.csv", delimiter= ";", decimal= ",")
+
+# filtrando pra SP
+base_sp = dados_brutos[dados_brutos["REGIAO"].isin(["10","11", "12","13"])]
+
+# removendo o que eu não vou usar
+base_sp_filtrada = base_sp.drop(["EXPOSICAO2", "PREMIO2", "IS_MEDIA"], axis=1)
+
+```
+
+## 1. Introdução e Contextualização
+
+* **Objetivo:** Analisar a base bruta de seguros automotivos (`Autoseg2021A`) com foco na região de São Paulo (Regiões 10, 11, 12 e 13).
+
+## 2. Perguntas de Pesquisa
+
+O desenvolvimento deste projeto foi guiado por duas perguntas principais:
+
+1. Existem distinções significativas nos padrões de preços (Prêmios) e nos custos de sinistros entre homens e mulheres?
+2. Existe interação entre idade e sexo nas colisões? Homens jovens ou mulheres mais velhas se acidentam mais?
+
+## 3. Organização e Processamento dos Dados
+
+* **Base Original:** 3.390.758 de registros (Dados brutos) e 22 variáveis.
+* **Filtro Regional (SP):** Redução para 438.164 linhas após seleção de São Paulo.
+* **Limpeza:** Remoção de variáveis desnecessárias (`EXPOSICAO2`, `PREMIO2`, `IS_MEDIA`), restando 19 variáveis.
+* **Variáveis Calculadas:** Verifiquei os valores de prêmio médio, frequência sinistral, colisão e severidade.
+
+# 4. Resultados 
+
+## 4.1 Padrões por Sexo 
+
+### Tabela 1: 
+
+```{python}
+#| warning: false
+#| message: false
+#| echo: false
+#| results: "hide"
+
+import pandas as pd
+
+colunas_frequencia = ["FREQ_SIN1", "FREQ_SIN2", "FREQ_SIN3", "FREQ_SIN4", "FREQ_SIN9"]
+colunas_indenizacao = ["INDENIZ1", "INDENIZ2", "INDENIZ3", "INDENIZ4", "INDENIZ9"]
+
+base_pf = base_sp_filtrada[~base_sp_filtrada["SEXO"].isin(["J", "0", 0, "0.0"])]
+
+agrupado = base_pf.groupby("SEXO").agg({
+    "EXPOSICAO1": "sum",
+    "PREMIO1": "sum",
+    **{col: "sum" for col in colunas_frequencia},  
+    **{col: "sum" for col in colunas_indenizacao}  
+}).reset_index()
+
+agrupado["TOTAL_FREQ"] = agrupado[colunas_frequencia].sum(axis=1)
+agrupado["TOTAL_INDENIZ"] = agrupado[colunas_indenizacao].sum(axis=1)
+
+analise_sexo = pd.DataFrame()
+analise_sexo["Sexo"] = agrupado["SEXO"]
+analise_sexo["Premio_Medio"] = agrupado["PREMIO1"] / agrupado["EXPOSICAO1"]
+analise_sexo["Freq_Sinistral_Total"] = agrupado["TOTAL_FREQ"] / agrupado["EXPOSICAO1"]
+analise_sexo["Custo_Medio_Exposto"] = agrupado["TOTAL_INDENIZ"] / agrupado["EXPOSICAO1"]
+analise_sexo["Severidade_Roubo"] = agrupado["INDENIZ1"] / agrupado["FREQ_SIN1"]
+analise_sexo["Severidade_Colisao_Parcial"] = agrupado["INDENIZ2"] / agrupado["FREQ_SIN2"]
+analise_sexo["Severidade_Perda_Total"] = agrupado["INDENIZ3"] / agrupado["FREQ_SIN3"]
+
+analise_sexo = analise_sexo.fillna(0)
+
+formatacao = {
+    "Premio_Medio": "R$ {:,.2f}", 
+    "Freq_Sinistral_Total": "{:.2%}", 
+    "Custo_Medio_Exposto": "R$ {:,.2f}",
+    "Severidade_Roubo": "R$ {:,.2f}", 
+    "Severidade_Colisao_Parcial": "R$ {:,.2f}", 
+    "Severidade_Perda_Total": "R$ {:,.2f}"
+}
+
+tabela1 = analise_sexo.style \
+    .format(formatacao, decimal=',', thousands='.') \
+    .background_gradient(cmap='Blues', axis=0) \
+    .set_properties(**{'text-align': 'right', 'padding': '8px'}) \
+    .set_properties(subset=['Sexo'], **{'text-align': 'left', 'font-weight': 'bold'}) \
+    .set_table_styles([
+        {'selector': 'th', 'props': [('background-color', '#1E3A8A'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center'), ('padding', '10px')]},
+        {'selector': 'tr:nth-child(even)', 'props': [('background-color', '#F8FAFC')]}
+    ]) \
+    .hide(axis='index')
+
+tabela1
+```
+
+**Interpretação:** A tabela revela que o perfil masculino apresenta um risco financeiro superior para a carteira de seguros quando comparado ao feminino. Os homens pagam, em média, um prêmio mais caro (Premio_Medio) e, embora sofram uma frequência ligeiramente menor de sinistros totais, o impacto financeiro dos seus acidentes é significativamente maior. Isso fica evidente nos custos médios de severidade para roubo, colisão parcial e perda total, que são consistentemente mais elevados no perfil masculino, indicando ocorrências de maior gravidade. Em contrapartida, as mulheres apresentam um custo médio por exposto bem menor, consolidando o perfil feminino como o de menor custo gerado para a seguradora, apesar de possuírem uma frequência de sinistros ligeiramente superior na média geral.
+
+### Gráfico 1: Comparativo do Prêmio Médio de Seguro por Gênero
+
+```{python}
+#| warning: false
+#| message: false
+#| echo: false
+#| results: "hide"
+#| title: "Gráfico 1: Comparativo do Prêmio Médio de Seguro por Gênero"
+
+import matplotlib.pyplot as plt
+
+graf3 = analise_sexo[analise_sexo["Sexo"].isin(["F", "M"])]
+
+sexos  = graf3["Sexo"].tolist()
+precos = graf3["Premio_Medio"].tolist()
+cores  = ["salmon", "steelblue"]
+
+plt.figure(figsize=(6, 5))
+barras = plt.bar(sexos, precos, color=cores, width=0.4)
+
+for barra, valor in zip(barras, precos):
+    plt.text(barra.get_x() + barra.get_width() / 2, barra.get_height() + 20,
+    "R$ " + str(round(valor, 2)), ha="center", va="bottom", fontsize=10)
+
+plt.title("Prêmio Médio por Sexo")
+plt.xlabel("Sexo")
+plt.ylabel("Prêmio Médio (R$)")
+plt.ylim(0, max(precos) * 1.2)
+plt.tight_layout()
+plt.show();
+```
+
+**Interpretação:** O gráfico de barras ilustra claramente a diferença no valor do seguro cobrado entre os gêneros, mostrando que o preço médio pago pelos homens (M) é superior ao pago pelas mulheres (F). Enquanto o perfil feminino apresenta um custo médio de R$ 1.214,22, o perfil masculino atinge o valor de R$ 1.362,04. Essa disparidade reflete diretamente os dados de severidade vistos anteriormente, onde os sinistros envolvendo o público masculino costumam gerar prejuízos mais caros e graves para a seguradora, justificando a cobrança de um prêmio mais elevado para cobrir esse maior risco financeiro.
+
+# 4.2. Padrões por Sexo e Idade
+
+### Tabela 2 
+
+```{python}
+#| warning: false
+#| message: false
+#| title: "Tabela 2"
+#| echo: false
+
+import pandas as pd
+
+base_colisao = base_sp_filtrada[base_sp_filtrada["SEXO"].isin(["F", "M"])].copy()
+
+agrupado_is = base_colisao.groupby(["IDADE", "SEXO"]).agg({
+    "EXPOSICAO1": "sum", 
+    "FREQ_SIN2": "sum", 
+    "INDENIZ2": "sum", 
+    "FREQ_SIN3": "sum", 
+    "INDENIZ3": "sum"
+}).reset_index()
+
+analise_idade_sexo = pd.DataFrame()
+analise_idade_sexo["Idade"] = agrupado_is["IDADE"]
+analise_idade_sexo["Sexo"] = agrupado_is["SEXO"]
+analise_idade_sexo["Freq_Colisao_Parcial"] = agrupado_is["FREQ_SIN2"] / agrupado_is["EXPOSICAO1"]
+analise_idade_sexo["Severidade_Colisao_Parcial"] = agrupado_is["INDENIZ2"] / agrupado_is["FREQ_SIN2"]
+analise_idade_sexo["Freq_Perda_Total"] = agrupado_is["FREQ_SIN3"] / agrupado_is["EXPOSICAO1"]
+analise_idade_sexo["Severidade_Perda_Total"] = agrupado_is["INDENIZ3"] / agrupado_is["FREQ_SIN3"]
+
+analise_idade_sexo = analise_idade_sexo.fillna(0)
+analise_idade_sexo = analise_idade_sexo.sort_values(by=["Idade", "Sexo"])
+
+formatacao_tabela2 = {
+    "Freq_Colisao_Parcial": "{:.2%}", 
+    "Severidade_Colisao_Parcial": "R$ {:,.2f}",
+    "Freq_Perda_Total": "{:.2%}", 
+    "Severidade_Perda_Total": "R$ {:,.2f}"
+}
+
+colunas_destaque = ["Freq_Colisao_Parcial", "Severidade_Colisao_Parcial", "Freq_Perda_Total", "Severidade_Perda_Total"]
+
+tabela2_dashboard = analise_idade_sexo.head(30).style \
+    .format(formatacao_tabela2, decimal=',', thousands='.') \
+    .background_gradient(subset=colunas_destaque, cmap='Blues', axis=0) \
+    .set_properties(**{'text-align': 'right', 'padding': '8px'}) \
+    .set_properties(subset=['Idade', 'Sexo'], **{'text-align': 'left', 'font-weight': 'bold'}) \
+    .set_table_styles([
+        {'selector': 'th', 'props': [('background-color', '#1E3A8A'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center'), ('padding', '10px')]},
+        {'selector': 'tr:nth-child(even)', 'props': [('background-color', '#F8FAFC')]}
+    ]) \
+    .hide(axis='index')
+
+tabela2_dashboard
+```
+
+
+### Gráfico 2
+
+```{python}
+#| warning: false
+#| message: false
+#| echo: false
+
+import matplotlib.pyplot as plt
+
+graf1 = analise_idade_sexo[analise_idade_sexo["Idade"] != 0]
+
+masculino_g1 = graf1[graf1["Sexo"] == "M"]
+feminino_g1  = graf1[graf1["Sexo"] == "F"]
+
+plt.figure(figsize=(12, 5))
+plt.plot(masculino_g1["Idade"], masculino_g1["Freq_Colisao_Parcial"], label="Masculino", color="steelblue", marker="o", markersize=3)
+plt.plot(feminino_g1["Idade"],  feminino_g1["Freq_Colisao_Parcial"],  label="Feminino",  color="salmon",   marker="o", markersize=3)
+
+plt.title("Frequência de Colisão Parcial por Idade e Sexo")
+plt.xlabel("Idade")
+plt.ylabel("Frequência de Colisão Parcial")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+
+### Gráfico 3
+
+```{python}
+#| warning: false
+#| message: false
+#| echo: false
+
+import matplotlib.pyplot as plt
+
+graf2 = analise_idade_sexo[analise_idade_sexo["Idade"] != 0]
+
+masculino_g2 = graf2[graf2["Sexo"] == "M"]
+feminino_g2  = graf2[graf2["Sexo"] == "F"]
+
+plt.figure(figsize=(12, 5))
+plt.plot(masculino_g2["Idade"], masculino_g2["Freq_Perda_Total"], label="Masculino", color="steelblue", marker="o", markersize=3)
+plt.plot(feminino_g2["Idade"],  feminino_g2["Freq_Perda_Total"],  label="Feminino",  color="salmon",   marker="o", markersize=3)
+
+codigos = [1, 2, 3, 4, 5]
+legendas_x = [
+    "Entre 18 e 25 anos",
+    "Entre 26 e 35 anos",
+    "Entre 36 e 45 anos",
+    "Entre 46 e 55 anos",
+    "Maior que 55 anos"
+]
+plt.xticks(codigos, legendas_x)
+
+plt.title("Frequência de Perda Total por Idade e Sexo")
+plt.xlabel("Faixa Etária")
+plt.ylabel("Frequência de Perda Total")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+Nota-se que a classe 1 (motoristas mais jovens, entre 18 e 25 anos) apresenta o maior índice de acidentes graves para ambos os sexos, com um destaque muito mais severo para o perfil masculino. À medida que a idade e a experiência aumentam, ocorre uma queda acentuada no risco entre as classes 1 e 2, seguida por uma estabilização progressiva nas faixas seguintes. Os homens mantêm uma taxa de perda total superior à das mulheres ao longo de quase toda a série, mas essa diferença diminui drasticamente na classe 5 (acima de 55 anos), onde a frequência de acidentes graves dos dois gêneros se torna praticamente igual e atinge o menor nível histórico.
+
+## 5. Abordagem Metodológica: 
+
+Foi utilizado o **Teste T**
+
+* **Justificativa:** Avaliar se as diferenças observadas entre os sexos (prêmio médio e severidade) são estatisticamente significativas.
+* **Decisão:** Aconselhamento do professor para validar as afirmações.
+* **Implementação:** Foi feita com código Python (Scipy/Stats). 
+* **Resultados:** O alpha considerado foi 0,05, no Prêmio médio (PREMIO1), a média masculina foi superior a feminina. A diferença é estatisticamente significativa. Na frequência de colisão (FREQ_SIN2), as mulheres apresentaram frequência um pouco maior. Já no custo de indenização por colisão (INDENIZ2), a diferença entre homens e mulheres não foi estatisticamente significativa. Você consegue ver os resultados na parte dos códigos, mas por favor desconsidere isso de negligênciável e tudo mais, porque foi a IA que inseriu, mas eu não removi só para mostrar mesmo.
+
+> Aqui foi utilizado IA.
+
+
+## 6. Conclusões
+
+## 6. Resultados e Discussão (Etapa 6)
+
+As análises realizadas responderam às duas perguntas de pesquisa propostas:
+
+1) **Existem diferenças nos padrões de preços e custos de sinistros por sexo?** Existem diferenças estatisticamente significativas no prêmio médio e na frequência de colisão entre homens e mulheres, mas no custo de indenização não.
+2) **Existe interação entre idade e sexo nas colisões? Homens jovens ou mulheres mais velhas se acidentam mais?** A faixa etária tem influência mais evidente do que o sexo nos padrões de colisão. Segurados mais jovens (18-25 anos) apresentam maior frequência de colisão e de perda total em ambos os sexos. As diferenças entre homens e mulheres dentro de cada faixa são pequenas e não sustentam uma conclusão clara sobre qual grupo apresenta maior risco associado ao sexo.
+
+## 7. Uso de Inteligência Artificial
+
+* **Ferramenta Utilizada:** Gemini (Google) e Claude (Anthropic).
+* **Etapas de Apoio:** Exclusivamente no auxílio da sintaxe de código em Python (filtragem e Teste T).
+* **Avaliação Crítica:** 
+* **Contribuição:** Aceleração da escrita do código frente ao tempo curto.
+* **Limitação:** Respostas extras e desnecessárias que demandaram correção linha por linha, para garantir que raciocínio permanecesse.
+
+## 8. Guia para Reprodução das Análises
+
+Para reproduzir as tabelas, gráficos e testes estatísticos deste relatório, é necessário configurar um ambiente Python com as bibliotecas `pandas`, `matplotlib`, `scipy` e `numpy` instaladas. O passo a passo completo e a manipulação dos dados estão consolidados no arquivo `analise.ipynb`, basta executar as células direcionando para o caminho correto da base de dados bruta.
+
+> No documento `documentacao.md` você terá acesso a todas as informações do trabalho de uma forma mais detalhada.
